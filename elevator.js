@@ -42,6 +42,30 @@
             elevator.checkDestinationQueue(); // enforce new DQ
         }
 
+        function cleanUpDQ(elevator) {
+            var elev_index = elevators.indexOf(elevator);
+            var dq = elevator.destinationQueue;
+
+            dq.forEach(function(floorNum) {
+                // Check if someone's still waiting on each floor of the DQ
+                // if neither button is activated on the floor, then remove it from the DQ (some other elevator must have serviced it earlier)
+                var floor = floors[floorNum];
+
+                if(!floor.buttonStates.down == "activated" && !floor.buttonStates.up == "activated") {
+                    var pressedFloors = elevator.getPressedFloors();
+
+                    if(!pressedFloors.includes(floorNum)) {// only remove a floorNum if it's not a number pressed inside the elevator
+                        console.log(`[cleanUpDQ ELEV ${elev_index}] Remove floor ${floorNum}`);
+                        remove_item_from_arr(dq, floorNum);
+                    }
+                }
+            });
+
+            console.log(`[cleanUpDQ ELEV ${elev_index}] DQ after cleanup: ${dq}`);
+            elevator.destinationQueue = dq;
+            elevator.checkDestinationQueue(); // enforce new DQ
+        }
+
 
         function newDirectionAfterStopping(elevator) {
             var elev_index = elevators.indexOf(elevator);
@@ -72,29 +96,29 @@
 
             // if there are no pressed floors (no one in elevator), then try to use next elem in DQ to decide direction
             else if (elevator.destinationQueue.length > 0) {
-                var nextFloor = elevator.destinationQueue[0];
-
-                if(nextFloor - curFloor > 0) { // nextFloor is above currentFloor, going UP
-                    console.log(`[nDAS:Elev${elev_index}] stopped at${curFloor}. Going UP from DQ to:${nextFloor}`);
+                var nextFloorNum = elevator.destinationQueue[0];
+                if(nextFloorNum - curFloor > 0) { // nextFloorNum is above currentFloor, going UP
+                    console.log(`[nDAS:Elev${elev_index}] stopped at:${curFloor}. Going UP from DQ to:${nextFloorNum}`);
                     // sortDQ(elevator, "ascending");
                     elevator.goingDownIndicator(false);
                     elevator.goingUpIndicator(true);
                 }
                 else {
-                    console.log(`[nDAS:Elev${elev_index}] stopped at:${curFloor}. Going DOWN from DQ to:${nextFloor}`);
+                    console.log(`[nDAS:Elev${elev_index}] stopped at:${curFloor}. Going DOWN from DQ to:${nextFloorNum}`);
                     // sortDQ(elevator, "descending");
                     elevator.goingDownIndicator(true);
                     elevator.goingUpIndicator(false);
                 }
+
             }
             else { // no pressed floors, no destination queue: go IDLE!
-            // can't decide direction? at least set both indicators on, so that the lift is more usable
                 console.log(`[nDAS:Elev${elev_index}] Go IDLE and turn BOTH indicators on!`);
 
                 if (!IDLE_ELEVS.includes(elevator)) {
                     IDLE_ELEVS.push(elevator);
                     console.log(`[IDLE_ELEVS] length: ${IDLE_ELEVS.length}`);
                 }
+                // can't decide direction: at least set both indicators on, so that the lift is more usable
                 elevator.goingDownIndicator(true);
                 elevator.goingUpIndicator(true);
             }
@@ -124,6 +148,11 @@
                 console.error("ERROR: directionAndSort: destinationDirection invalid");
             }
         }
+
+        function sleep(ms) {
+          return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
 
 
         function getSuitableElevator(floor) {
@@ -174,80 +203,89 @@
         }
 
 
-        floors.forEach(function(floor) {
-            //console.log("working on floor: " + floor);
+        function handleFloorCall(floor, floor_num){
+            // pick most suitable elevator to service this request
+            var elev = getSuitableElevator(floor);
+            var chosen_elev_index;
+
+            if(elev) { // if a suitable elev could be found
+                chosen_elev_index = elevators.indexOf(elev);
+
+                // if(elev.currentFloor() != floor_num) { //only enqueue if not already on the target floor
+                    elev.goToFloor(floor_num); // enqueue the floor
+                    elev.destinationQueue = dedup(elev.destinationQueue);
+                    cleanUpDQ(elev); // remove floors where no one's waiting any more, from DQ
+                    elev.checkDestinationQueue(); // enforce new DQ
+                    console.log(`[FLOOR ${floor_num} BUTTON] Elev ${chosen_elev_index} DQ after handleFloorCall(): ${elev.destinationQueue}`);
+                // }
+            }
+            else {
+                // Ignore impatient floor button presses
+                console.log(`[FLOOR ${floor_num} BUTTON] Couldn't find suitable elevator! IGNORE floor request!`);
+            }
+        }
+
+        floors.forEach(function(floor) { // initialize all floors with handlers
             var floor_num = floor.floorNum();
+            console.log(`Setting up floor ${floor_num} ...`);
+
             floor.on("up_button_pressed", function(floor) {
                 console.log(`[FLOOR ${floor_num} BUTTON] UP button pressed`);
-
-                // pick most suitable elevator to service this request
-                elev = getSuitableElevator(floor);
-                var chosen_elev_index;
-
-                if(elev) { // if a suitable elev could be found
-                    chosen_elev_index = elevators.indexOf(elev);
-                    elev.goToFloor(floor.floorNum()); // enqueue the floor
-                    elev.destinationQueue = dedup(elev.destinationQueue);
-                    elev.checkDestinationQueue(); // enforce new DQ
-                    console.log(`[FLOOR ${floor_num} BUTTON] Elev ${chosen_elev_index} DQ after dedup: ${elev.destinationQueue}`);
-                }
-                else {
-                    // Ignore impatient floor button presses
-                    console.log(`[FLOOR ${floor_num} BUTTON] Couldn't find suitable elevator! IGNORE floor ${floor} request!`);
-                }
+                handleFloorCall(floor, floor_num);
             });
 
             floor.on("down_button_pressed", function(floor) {
                 console.log(`[FLOOR ${floor_num} BUTTON] DOWN button pressed`);
-
-                elev = getSuitableElevator(floor);
-                var chosen_elev_index;
-
-                if(elev) { // if a suitable elev could be found
-                    chosen_elev_index = elevators.indexOf(elev);
-                    elev.goToFloor(floor.floorNum()); // enqueue the floor
-                    elev.destinationQueue = dedup(elev.destinationQueue);
-                    elev.checkDestinationQueue(); // enforce new DQ
-                    console.log(`[FLOOR ${floor_num} BUTTON] Elev ${chosen_elev_index} DQ after dedup: ${elev.destinationQueue}`);
-                }
-                else {
-                    // Ignore impatient floor button presses
-                    console.log(`[FLOOR ${floor_num} BUTTON] Couldn't find suitable elevator! IGNORE floor ${floor} request!`);
-                }
+                handleFloorCall(floor, floor_num);
             });
         });
 
 
+
+
+
+
+
+        /* SETUP ELEVATORS */
         elevators.forEach(function(elevator) { // Setup all elevators
             var this_elev_index = elevators.indexOf(elevator);
             console.log(`Setting up elevator ${this_elev_index} ...`);
 
            // Whenever the elevator is idle (has no more queued destinations) ...
            elevator.on("idle", function() {
+                console.log(`[ELEV ${this_elev_index}] OnIDLE! DQ: ${elevator.destinationQueue}`);
                 elevator.goingDownIndicator(true);
                 elevator.goingUpIndicator(true);
 
+                // nearestActiveFloor = getNearestActiveFloor(elevator);
+
                 if (!IDLE_ELEVS.includes(elevator)) {
                     IDLE_ELEVS.push(elevator);
+                    console.log(`[IDLE_ELEVS] OnIDLE: Pushed elev to IDLE_ELEVS, length: ${IDLE_ELEVS.length}`);
                 }
-                console.log(`[ELEV ${this_elev_index}] IDLE! DQ: ${elevator.destinationQueue}`);
-                console.log(`[IDLE_ELEVS] length: ${IDLE_ELEVS.length}`);
+                else
+                    console.log(`[IDLE_ELEVS] OnIDLE: Didn't push elev to IDLE_ELEVS, length: ${IDLE_ELEVS.length}`);
            });
 
            elevator.on("floor_button_pressed", function(floorNum) {
                // button was pressed INSIDE the elevator, not a "floor button"!!
+               console.log(`[ELEV ${this_elev_index} BUTTON]: Pressed floor ${floorNum}.`);
                elevator.goToFloor(floorNum);
                directionAndSort(elevator); // this can make an elevator go idle again: darn
 
-               // remove this elevator from IDLE_ELEVS, if present
+               // if this elevator is in IDLE_ELEVS, remove from IDLE_ELEVS
                remove_item_from_arr(IDLE_ELEVS, elevator);
-               console.log(`[ELEV ${this_elev_index} BUTTON]: Pressed floor ${floorNum}. DQ: ${elevator.destinationQueue}`);
+
+               console.log(`[ELEV ${this_elev_index} BUTTON]: Leaving. DQ now: ${elevator.destinationQueue}`);
                console.log(`[ELEV ${this_elev_index} BUTTON]: removed elev from IDLE_ELEVS, length: ${IDLE_ELEVS.length}`);
            });
 
            elevator.on("passing_floor", function(floorNum, direction) {
                 var passing_floor = floors[floorNum];
                 var pressedFloors = elevator.getPressedFloors();
+
+                // Clean up DQ: remove unnecessary floors where no one's waiting any more
+                cleanUpDQ(elevator);
 
                 // if passing by a floor that has been 'pressed', always stop on it
                 if(pressedFloors.includes(floorNum)) { // if the passing floor is ON the stop list of "PressedFloors"
@@ -272,10 +310,15 @@
                 }
            });
 
+           // elevator was traveling and has arrived at floor
            elevator.on("stopped_at_floor", function(floorNum) {
                // remove all dupes of this floor from the dq
                remove_item_from_arr(elevator.destinationQueue, floorNum);
-               console.log(`[ELEV ${this_elev_index} STOPPED] removed all entries of floor ${floorNum}. DQ: '${elevator.destinationQueue}'`);
+               console.log(`[ELEV ${this_elev_index} STOPPED at ${floorNum}] removed all entries of floor ${floorNum}. DQ: '${elevator.destinationQueue}'`);
+
+               // Clean up DQ: remove unnecessary floors where no one's waiting any more
+               cleanUpDQ(elevator);
+
                newDirectionAfterStopping(elevator);
                // this is okay, because even if some people on this floor can't fit in the elevator,
                // they will just keep calling the elevator again and again later, so the floor will get enqueued then
