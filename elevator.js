@@ -3,7 +3,7 @@
         var NUM_ELEVATORS = elevators.length;
         var NUM_FLOORS = floors.length - 1;
         var IDLE_ELEVS = [];
-        const OK_LOAD_FACTOR = 0.85;
+        const OK_LOAD_FACTOR = 0.8;
 
 
         function dedup(arr) {
@@ -22,25 +22,25 @@
         }
 
 
-        function sortDQ(elevator, order) {
-            var dq = elevator.destinationQueue;
-            var elev_index = elevators.indexOf(elevator);
+        // function sortDQ(elevator, order) {
+        //     var dq = elevator.destinationQueue;
+        //     var elev_index = elevators.indexOf(elevator);
 
-            if(order == "ascending"){
-                dq.sort(function(a, b){return a-b});
-            }
-            else if (order == "descending") {
-                dq.sort(function(a, b){return b-a});
-            }
-            else {
-                console.log("[sortDQ] ERROR IN sortDQ: improper order!");
-            }
-            // console.log("[sortDQ] DQ after sorting in '" + order + "': " + dq);
-            dq = dedup(dq);
-            console.log(`[sortDQ] Elev ${elev_index} DQ after '${order}' sort and de-duplicating: ${dq}`);
-            elevator.destinationQueue = dq;
-            elevator.checkDestinationQueue(); // enforce new DQ
-        }
+        //     if(order == "ascending"){
+        //         dq.sort(function(a, b){return a-b});
+        //     }
+        //     else if (order == "descending") {
+        //         dq.sort(function(a, b){return b-a});
+        //     }
+        //     else {
+        //         console.log("[sortDQ] ERROR IN sortDQ: improper order!");
+        //     }
+        //     // console.log("[sortDQ] DQ after sorting in '" + order + "': " + dq);
+        //     dq = dedup(dq);
+        //     console.log(`[sortDQ] Elev ${elev_index} DQ after '${order}' sort and de-duplicating: ${dq}`);
+        //     elevator.destinationQueue = dq;
+        //     elevator.checkDestinationQueue(); // enforce new DQ
+        // }
 
         function cleanUpDQ(elevator) {
             var elev_index = elevators.indexOf(elevator);
@@ -131,13 +131,13 @@
             // console.log("destinationDirection: " + elevator.destinationDirection());
             if(elevator.destinationDirection() == "up") {
                 console.log(`[directionAndSort] Elev ${elev_index} going up, hence sorting DQ asc`);
-                sortDQ(elevator, "ascending");
+                // sortDQ(elevator, "ascending");
                 elevator.goingDownIndicator(false);
                 elevator.goingUpIndicator(true);
             }
             else if(elevator.destinationDirection() == "down") {
                 console.log(`[directionAndSort] Elev ${elev_index} going down, hence sorting DQ desc`);
-                sortDQ(elevator, "descending");
+                // sortDQ(elevator, "descending");
                 elevator.goingDownIndicator(true);
                 elevator.goingUpIndicator(false);
             }
@@ -295,7 +295,7 @@
                 }
 
                 // decide if we want to pick up additional passengers on a passing floor
-                if(elevator.loadFactor() < OK_LOAD_FACTOR) { // if there's still space in the elevator
+                else if(elevator.loadFactor() < OK_LOAD_FACTOR) { // if there's still space in the elevator
                    console.log(`[ELEV ${this_elev_index} PASSING ${floorNum}] with ok load and direction '${direction}'`);
 
                     // if((passing_floor.buttonStates.down == "activated" && direction == "down") ||
